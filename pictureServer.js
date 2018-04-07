@@ -1,19 +1,14 @@
 /*
 server.js
-
 Authors:David Goedicke (da.goedicke@gmail.com) & Nikolas Martelaro (nmartelaro@gmail.com)
-
 This code is heavily based on Nikolas Martelaroes interaction-engine code (hence his authorship).
 The  original purpose was:
 This is the server that runs the web application and the serial
 communication with the micro controller. Messaging to the micro controller is done
 using serial. Messaging to the webapp is done using WebSocket.
-
 //-- Additions:
 This was extended by adding webcam functionality that takes images remotely.
-
 Usage: node server.js SERIAL_PORT (Ex: node server.js /dev/ttyUSB0)
-
 Notes: You will need to specify what port you would like the webapp to be
 served from. You will also need to include the serial port address as a command
 line input.
@@ -23,6 +18,7 @@ var express = require('express'); // web server application
 var app = express(); // webapp
 var http = require('http').Server(app); // connects http library to server
 var io = require('socket.io')(http); // connect websocket library to server
+var Jimp = require("jimp");
 var serverPort = 8000;
 var SerialPort = require('serialport'); // serial library
 var Readline = SerialPort.parsers.Readline; // read serial data as lines
@@ -64,13 +60,13 @@ var opts = { //These Options define how the webcam is operated.
     //Which camera to use
     //Use Webcam.list() for results
     //false for default device
-    device: false,
     // [location, buffer, base64]
     // Webcam.CallbackReturnTypes
     callbackReturn: "location",
     //Logging
     verbose: false
 };
+
 var Webcam = NodeWebcam.create( opts ); //starting up the webcam
 //----------------------------------------------------------------------------//
 
@@ -83,11 +79,32 @@ const parser = new Readline({
   delimiter: '\r\n'
 });
 
+function wait(ms){
+    var start = new Date().getTime();
+    var end = start;
+    while(end < start + ms) {
+	end = new Date().getTime();
+    }
+}
+
 // Read data that is available on the serial port and send it to the websocket
 serial.pipe(parser);
 parser.on('data', function(data) {
   console.log('Data:', data);
   io.emit('server-msg', data);
+
+    console.log('making a making a picture at'+ imageName); // Second, the name is logged to the console.
+var imageName = new Date().toString().replace(/[&\/\\#,+()$~%.'":*?<>{}\s-]/g, '');
+
+
+    NodeWebcam.capture('public/'+imageName, opts, function( err, data ) {
+    });
+    wait(1000);
+    Jimp.read('public/' + imageName + '.jpg', function (err, lenna) {
+	if (err) throw err;
+	lenna.invert().write('public/' + imageName + '.jpg'); // save
+    })
+	io.emit('newPicture',( imageName+'.jpg'))
 });
 //----------------------------------------------------------------------------//
 
@@ -115,9 +132,9 @@ io.on('connect', function(socket) {
     /// First, we create a name for the new picture.
     /// The .replace() function removes all special characters from the date.
     /// This way we can use it as the filename.
-    var imageName = new Date().toString().replace(/[&\/\\#,+()$~%.'":*?<>{}\s-]/g, '');
 
-    console.log('making a making a picture at'+ imageName); // Second, the name is logged to the console.
+    console.log('making a making a picture at'+ imageName); // Second, the name is logged to the console. 
+    var imageName = new Date().toString().replace(/[&\/\\#,+()$~%.'":*?<>{}\s-]/g, '');
 
     //Third, the picture is  taken and saved to the `public/`` folder
     NodeWebcam.capture('public/'+imageName, opts, function( err, data ) {
@@ -131,4 +148,3 @@ io.on('connect', function(socket) {
     console.log('user disconnected');
   });
 });
-//----------------------------------------------------------------------------//
